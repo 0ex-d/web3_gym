@@ -1,0 +1,18 @@
+[package]
+name = "gym"
+edition = "2024.beta"
+license = "MIT"           
+authors = ["Precious"]
+
+[dependencies]
+
+[addresses]
+gym = "0x0"
+
+[dev-dependencies]
+
+[dev-addresses]
+# The dev-addresses section allows overwriting named addresses for the `--test`
+# and `--dev` modes.
+# alice = "0xB0B"
+
