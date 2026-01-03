@@ -1,52 +1,74 @@
-use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Duration;
 
-use chrono::{DateTime, Utc};
-use std::{
-    sync::Arc,
-    time::{self, Duration},
-};
+use axum::Router;
+use axum::routing::{get, post};
+use tokio::time::Instant;
+use tracing::{debug, info};
 
-use tokio::sync::broadcast;
-use tracing::{Level, info};
-use tracing_subscriber;
-
+use api::config::{AppConfig, MAX_CONCURRENT_REQUESTS, RPC_TIMEOUT_ERR_SLEEP_RETRY_PERIOD_MS};
+use api::handlers::{challenge, entry_prepare, entry_submit, health, verify};
+use api::state::AppState;
+use redis::aio::ConnectionManager;
 use sui_sdk::SuiClientBuilder;
-use sui_sdk::rpc_types::SuiObjectDataOptions;
-use sui_sdk::types::base_types::ObjectID;
-
-const PKG_ID: &str = "0x4f68c8030c478aa13367981d12f3c90545c03cc30a15768cc03e8c8d85617a16";
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
+    let _ = dotenvy::dotenv().expect("to load .env file");
+
     let log_level = std::env::var("RUST_LOG")
         .map(|lev| lev.parse().expect("invalid RUST_LOG, change to eg 'info'"))
         .unwrap_or(tracing::Level::INFO);
 
     tracing_subscriber::fmt().with_max_level(log_level).init();
 
-    let sui_rpc_url =
-        std::env::var("RPC_URL").unwrap_or("https://fullnode.testnet.sui.io:443".to_owned());
+    let config = AppConfig::from_env()?;
+    let start_ts = Instant::now();
+    let sui_client = SuiClientBuilder::default()
+        .request_timeout(RPC_TIMEOUT_ERR_SLEEP_RETRY_PERIOD_MS)
+        .max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
+        .build(config.rpc_url.clone())
+        .await
+        .expect("can't connect to Sui RPC {:?}");
+    info!(
+        "Sui RPC version: {} connected!. Took {:?}",
+        sui_client.api_version(),
+        Duration::from(start_ts.elapsed())
+    );
 
-    let sui_client = SuiClientBuilder::default().build(sui_rpc_url).await?;
-    info!("Sui testnet version: {}", sui_client.api_version());
+    info!("Starting up redis: {}", config.redis_url);
 
-    // info!(
-    //     "available_rpc_methods: {:?}",
-    //     sui_client.available_rpc_methods()
-    // );
+    let redis_client = redis::Client::open(config.redis_url.clone())?;
+    let redis: ConnectionManager = redis_client
+        .get_connection_manager()
+        .await
+        .expect("redis conn failed");
 
-    let pkg_id = ObjectID::from_str(PKG_ID)?;
+    let state = Arc::new(AppState {
+        config,
+        sui: sui_client,
+        redis,
+    });
 
-    let pkg = sui_client
-        .read_api()
-        .get_normalized_move_modules_by_package(pkg_id)
-        .await?;
-    info!("{:#?}", pkg);
+    let bind_addr = state.config.bind_addr.clone();
+    let app = Router::new()
+        .route("/health", get(health))
+        .route("/challenge", post(challenge))
+        .route("/verify", post(verify))
+        .route("/entry/prepare", post(entry_prepare))
+        .route("/entry/submit", post(entry_submit))
+        .with_state(state);
 
-    // let chain_id = sui_client.read_api().get_chain_identifier().await?;
+    info!("Starting up API server: {bind_addr}");
+    let start_ts = Instant::now();
 
-    // write EDA code
-    // let gm = GymManager::run();
+    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
+    info!(
+        "API listening on {}. Took {:?}",
+        bind_addr,
+        Duration::from(start_ts.elapsed())
+    );
+    axum::serve(listener, app).await?;
 
     Ok(())
 }
