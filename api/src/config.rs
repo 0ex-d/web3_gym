@@ -1,9 +1,13 @@
 use std::str::FromStr;
+use std::time::Duration;
 use url::Url;
 
 use eyre::WrapErr;
 use sui_sdk::types::SUI_CLOCK_OBJECT_ID;
 use sui_sdk::types::base_types::ObjectID;
+
+pub const RPC_TIMEOUT_ERR_SLEEP_RETRY_PERIOD_MS: Duration = Duration::from_millis(10_000);
+pub const MAX_CONCURRENT_REQUESTS: usize = 1_000;
 
 #[derive(Clone, Debug)]
 pub struct AppConfig {
@@ -22,8 +26,9 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn from_env() -> eyre::Result<Self> {
-        let url: Url = "https://fullnode.testnet.sui.io:443".parse()?;
-        let rpc_url = std::env::var("RPC_URL").unwrap_or_else(|_| url.to_string());
+        let rpc_url = std::env::var("RPC_URL")
+            .unwrap_or_else(|_| "https://fullnode.testnet.sui.io:443".to_owned());
+        let rpc_url: Url = rpc_url.parse()?;
         let package_id = std::env::var("PACKAGE_ID")
             .wrap_err("PACKAGE_ID is required")?
             .parse()
@@ -53,15 +58,17 @@ impl AppConfig {
             .ok()
             .and_then(|val| val.parse::<usize>().ok())
             .unwrap_or(90);
+
         let redis_url =
-            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_owned());
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_owned());
+        let redis_url: Url = redis_url.parse()?;
 
         let ip_addr = std::env::var("IP_ADDR").unwrap_or_else(|_| "0.0.0.0".to_owned());
         let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_owned());
         let bind_addr: String = format!("{}:{}", ip_addr, port).parse()?;
 
         Ok(Self {
-            rpc_url,
+            rpc_url: rpc_url.to_string(),
             package_id,
             module,
             verify_fn,
@@ -70,7 +77,7 @@ impl AppConfig {
             challenge_ttl_secs,
             verify_ttl_secs,
             tx_ttl_secs,
-            redis_url,
+            redis_url:redis_url.to_string(),
             bind_addr,
         })
     }
