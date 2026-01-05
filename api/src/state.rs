@@ -1,7 +1,6 @@
+use crate::config::AppConfig;
 use redis::aio::ConnectionManager;
 use sui_sdk::SuiClient;
-
-use crate::config::AppConfig;
 
 #[derive(Clone)]
 pub struct AppState {

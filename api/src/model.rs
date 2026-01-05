@@ -20,17 +20,19 @@ pub struct VerifyRequest {
 
 #[derive(Debug, Serialize)]
 pub struct VerifyResponse {
-    pub verified: bool,
+    pub success: bool,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct EnterPrepareRequest {
+pub struct EntryPrepareRequest {
     pub address: String,
     pub membership_id: String,
+    pub timestamp: i64,
+    pub signature: String,
 }
 
 #[derive(Debug, Serialize)]
-pub struct EnterPrepareResponse {
+pub struct EntryPrepareResponse {
     pub tx_bytes_b64: String,
     pub digest: String,
     pub expires_at: i64,
