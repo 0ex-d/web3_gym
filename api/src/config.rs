@@ -77,7 +77,7 @@ impl AppConfig {
             challenge_ttl_secs,
             verify_ttl_secs,
             tx_ttl_secs,
-            redis_url:redis_url.to_string(),
+            redis_url: redis_url.to_string(),
             bind_addr,
         })
     }

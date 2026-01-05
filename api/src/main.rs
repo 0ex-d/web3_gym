@@ -7,7 +7,7 @@ use tokio::time::Instant;
 use tracing::{debug, info};
 
 use api::config::{AppConfig, MAX_CONCURRENT_REQUESTS, RPC_TIMEOUT_ERR_SLEEP_RETRY_PERIOD_MS};
-use api::handlers::{challenge, entry_prepare, entry_submit, health, verify};
+use api::handlers::routes::{entry_prepare, health};
 use api::state::AppState;
 use redis::aio::ConnectionManager;
 use sui_sdk::SuiClientBuilder;
@@ -36,7 +36,7 @@ async fn main() -> eyre::Result<()> {
         Duration::from(start_ts.elapsed())
     );
 
-    info!("Starting up redis: {}", config.redis_url);
+    debug!("Starting up redis: {}", config.redis_url);
 
     let redis_client = redis::Client::open(config.redis_url.clone())?;
     let redis: ConnectionManager = redis_client
@@ -53,13 +53,10 @@ async fn main() -> eyre::Result<()> {
     let bind_addr = state.config.bind_addr.clone();
     let app = Router::new()
         .route("/health", get(health))
-        .route("/challenge", post(challenge))
-        .route("/verify", post(verify))
         .route("/entry/prepare", post(entry_prepare))
-        .route("/entry/submit", post(entry_submit))
         .with_state(state);
 
-    info!("Starting up API server: {bind_addr}");
+    debug!("Starting up API server: {bind_addr}");
     let start_ts = Instant::now();
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;

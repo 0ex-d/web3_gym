@@ -24,6 +24,12 @@ pub enum ApiError {
 
     #[error("internal error: {0}")]
     Anyhow(#[from] anyhow::Error),
+
+    #[error("Too many requests")]
+    TooManyRequests(String),
+
+    #[error("Internal server error: {0}")]
+    InternalServer(String),
 }
 
 impl ApiError {
@@ -40,7 +46,8 @@ impl IntoResponse for ApiError {
             Self::Redis(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::Sui(_) => StatusCode::BAD_GATEWAY,
             Self::Bcs(_) => StatusCode::BAD_REQUEST,
-            Self::Anyhow(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
+            Self::Anyhow(_) | Self::InternalServer(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
         let body = Json(serde_json::json!({
